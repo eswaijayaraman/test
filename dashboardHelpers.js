@@ -13,6 +13,25 @@ export function normalizeStudentSections(value) {
     .filter(Boolean);
 }
 
+export function computeDashboardFilters(teacher, gradeFilter, sectionFilter) {
+  const grade = gradeFilter ? Number(gradeFilter) : null;
+  const section = sectionFilter ? String(sectionFilter).trim() : null;
+  const allowedSections = teacher?.role === 'Teacher' ? normalizeStudentSections(teacher.sections) : null;
+
+  if (teacher?.role === 'Admin') {
+    return { grade: grade || null, section: section || null, allowedSections: null };
+  }
+
+  let selectedGrade = grade || (teacher?.grade || null);
+  let selectedSection = section || (allowedSections?.length === 1 ? allowedSections[0] : null);
+
+  return {
+    grade: selectedGrade,
+    section: selectedSection,
+    allowedSections,
+  };
+}
+
 export function getHeatmapRange(grade) {
   if (grade === 4) return 12;
   if (grade === 5) return 15;
@@ -47,6 +66,15 @@ export function renderHeatmapData(records, range) {
     const errorRate = Number(((count / total) * 100).toFixed(1));
     return { tableNum, count, errorRate };
   });
+}
+
+export function isValidAdminCredentials(username, password) {
+  return username === 'eswarijayaraman' && password === 'sandipani';
+}
+
+export function isValidTeacherCredentials(name, password) {
+  const normalizedName = String(name || '').trim();
+  return normalizedName.length > 0 && password === `${normalizedName}_sandipani`;
 }
 
 export function buildRosterSummary(records) {

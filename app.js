@@ -4,10 +4,13 @@ import { generateGrade6Question } from './grade6Gen.js';
 import {
   parseWeakTableString,
   normalizeStudentSections,
+  computeDashboardFilters,
   getHeatmapRange,
   formatCsvCell,
   renderHeatmapData,
   buildRosterSummary,
+  isValidAdminCredentials,
+  isValidTeacherCredentials,
 } from './dashboardHelpers.js';
 
 const TIME_LIMITS = { 4: 60, 5: 45, 6: 30 };
@@ -29,6 +32,8 @@ const elements = {
   teacherRole: document.getElementById('teacherRole'),
   teacherAssignedGrade: document.getElementById('teacherAssignedGrade'),
   teacherAssignedSections: document.getElementById('teacherAssignedSections'),
+  teacherPassword: document.getElementById('teacherPassword'),
+  teacherLoginError: document.getElementById('teacherLoginError'),
   dashboardGradeFilter: document.getElementById('dashboardGradeFilter'),
   dashboardSectionFilter: document.getElementById('dashboardSectionFilter'),
   dashboardLoadBtn: document.getElementById('dashboardLoadBtn'),
@@ -345,10 +350,27 @@ elements.teacherLoginForm.addEventListener('submit', async (event) => {
 
   const name = elements.teacherName.value.trim();
   const role = elements.teacherRole.value;
+  const password = elements.teacherPassword.value.trim();
   const grade = elements.teacherAssignedGrade.value ? Number(elements.teacherAssignedGrade.value) : null;
   const sections = normalizeStudentSections(elements.teacherAssignedSections.value);
 
-  if (!name || !role) {
+  elements.teacherLoginError.classList.add('hidden');
+  elements.teacherLoginError.textContent = '';
+
+  if (!name || !role || !password) {
+    elements.teacherLoginError.textContent = 'Enter name, role, and password.';
+    elements.teacherLoginError.classList.remove('hidden');
+    return;
+  }
+
+  const isValidCredentials =
+    role === 'Admin'
+      ? isValidAdminCredentials(name, password)
+      : isValidTeacherCredentials(name, password);
+
+  if (!isValidCredentials) {
+    elements.teacherLoginError.textContent = 'Invalid username or password.';
+    elements.teacherLoginError.classList.remove('hidden');
     return;
   }
 
@@ -412,6 +434,7 @@ async function saveResult(report) {
       Total_Questions: report.totalQuestions,
       Time_Taken_Sec: report.timeTaken,
       Weak_Tables: report.weakTables.join(','),
+      Teacher_Name: state.teacher?.role === 'Teacher' ? state.teacher.name : null,
       Created_Time: report.createdTime,
     });
     state.savedToCatalyst = true;
@@ -433,19 +456,7 @@ function buildTeacherFilters() {
 
   const gradeFilter = Number(elements.dashboardGradeFilter.value) || null;
   const sectionFilter = elements.dashboardSectionFilter.value.trim() || null;
-  let assignedGrade = null;
-  let assignedSections = null;
-
-  if (state.teacher.role === 'Teacher') {
-    if (state.teacher.grade) assignedGrade = state.teacher.grade;
-    assignedSections = state.teacher.sections;
-  }
-
-  return {
-    grade: gradeFilter || assignedGrade,
-    section: sectionFilter || (assignedSections && assignedSections.length === 1 ? assignedSections[0] : null),
-    allowedSections: assignedSections,
-  };
+  return computeDashboardFilters(state.teacher, gradeFilter, sectionFilter);
 }
 
 async function loadDashboardData() {
@@ -468,10 +479,11 @@ async function loadDashboardData() {
     query = query.where('Section', '==', filters.section);
   }
   if (filters.allowedSections && filters.allowedSections.length > 0 && !filters.section) {
-    const sectionsQuery = filters.allowedSections.reduce((q, sectionValue) => {
-      return q.where('Section', '==', sectionValue);
-    }, query);
-    query = sectionsQuery;
+    if (filters.allowedSections.length === 1) {
+      query = query.where('Section', '==', filters.allowedSections[0]);
+    } else {
+      query = query.where('Section', 'in', filters.allowedSections);
+    }
   }
 
   const records = await query.find();

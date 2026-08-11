@@ -2,10 +2,13 @@ import { describe, it, expect } from 'vitest';
 import {
   parseWeakTableString,
   normalizeStudentSections,
+  computeDashboardFilters,
   getHeatmapRange,
   formatCsvCell,
   renderHeatmapData,
   buildRosterSummary,
+  isValidAdminCredentials,
+  isValidTeacherCredentials,
 } from './dashboardHelpers.js';
 
 describe('dashboardHelpers', () => {
@@ -46,6 +49,19 @@ describe('dashboardHelpers', () => {
     expect(results[6]).toEqual(expect.objectContaining({ tableNum: 7, count: 2, errorRate: 66.7 }));
     expect(results[12]).toEqual(expect.objectContaining({ tableNum: 13, count: 1, errorRate: 33.3 }));
     expect(results[13]).toEqual(expect.objectContaining({ tableNum: 14, count: 1, errorRate: 33.3 }));
+  });
+
+  it('validates admin and teacher credentials correctly', () => {
+    expect(isValidAdminCredentials('eswarijayaraman', 'sandipani')).toBe(true);
+    expect(isValidAdminCredentials('eswarijayaraman', 'wrong')).toBe(false);
+    expect(isValidTeacherCredentials('Anita', 'Anita_sandipani')).toBe(true);
+    expect(isValidTeacherCredentials('Anita', 'anita_sandipani')).toBe(false);
+  });
+
+  it('computes dashboard filters for admin and teacher roles', () => {
+    expect(computeDashboardFilters({ role: 'Admin' }, null, null)).toEqual({ grade: null, section: null, allowedSections: null });
+    expect(computeDashboardFilters({ role: 'Teacher', grade: 5, sections: 'A,B' }, null, null)).toEqual({ grade: 5, section: null, allowedSections: ['A', 'B'] });
+    expect(computeDashboardFilters({ role: 'Teacher', grade: 5, sections: 'A,B' }, null, 'A')).toEqual({ grade: 5, section: 'A', allowedSections: ['A', 'B'] });
   });
 
   it('builds roster summaries aggregated by student', () => {
