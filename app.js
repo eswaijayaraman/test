@@ -34,6 +34,7 @@ const elements = {
   teacherAssignedSections: document.getElementById('teacherAssignedSections'),
   teacherPassword: document.getElementById('teacherPassword'),
   teacherLoginError: document.getElementById('teacherLoginError'),
+  catalystStatus: document.getElementById('catalystStatus'),
   dashboardGradeFilter: document.getElementById('dashboardGradeFilter'),
   dashboardSectionFilter: document.getElementById('dashboardSectionFilter'),
   dashboardLoadBtn: document.getElementById('dashboardLoadBtn'),
@@ -347,6 +348,7 @@ elements.newProfileBtn.addEventListener('click', () => {
 
 elements.teacherLoginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+  updateCatalystStatus();
 
   const name = elements.teacherName.value.trim();
   const role = elements.teacherRole.value;
@@ -402,6 +404,21 @@ elements.rosterDateEnd.addEventListener('change', renderRosterTable);
 
 elements.exportCsvBtn.addEventListener('click', exportRosterCsv);
 
+function getCatalystStatusText() {
+  if (window.catalyst) {
+    if (typeof catalyst?.datastore === 'function') {
+      return 'Catalyst SDK loaded and Datastore available.';
+    }
+    return 'Catalyst SDK loaded, but datastore API is unavailable.';
+  }
+  return 'Catalyst SDK not loaded. Confirm /__catalyst/sdk/init.js is reachable and the browser console has no Catalyst errors.';
+}
+
+function updateCatalystStatus() {
+  if (!elements.catalystStatus) return;
+  elements.catalystStatus.textContent = getCatalystStatusText();
+}
+
 async function saveResult(report) {
   if (!window.catalyst || !catalyst.datastore) {
     saveReportLocally(report);
@@ -430,6 +447,8 @@ async function saveResult(report) {
 
     await testResultsTable.insert({
       Student_ID: studentRecordId,
+      Grade: report.grade,
+      Section: report.section,
       Score: report.score,
       Total_Questions: report.totalQuestions,
       Time_Taken_Sec: report.timeTaken,
@@ -495,6 +514,15 @@ async function loadDashboardData() {
 async function refreshDashboard() {
   const grade = state.teacher?.grade || Number(elements.dashboardGradeFilter.value) || 4;
   const records = await loadDashboardData();
+  if (!records || records.length === 0) {
+    renderDashboardMetrics(records, grade);
+    elements.heatmapGrid.innerHTML = '';
+    elements.scoreDistribution.innerHTML = '<p class="note">No dashboard records found. Confirm results have been saved to Zoho Catalyst and review active filters.</p>';
+    elements.rosterTableContainer.innerHTML = '<p class="note">No roster data available for the selected filters.</p>';
+    elements.heatmapDetail.innerHTML = '<p class="note">No heatmap details available because there are no matching records.</p>';
+    return;
+  }
+
   renderDashboardMetrics(records, grade);
   renderHeatmap(records, grade);
   renderScoreDistribution(records);
@@ -795,4 +823,5 @@ function exportRosterCsv() {
   downloadCsv([header, ...rows], 'teacher_roster_report.csv');
 }
 
+updateCatalystStatus();
 showSection('profileSection');
