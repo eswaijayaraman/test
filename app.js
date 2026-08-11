@@ -1,19 +1,50 @@
 import { generateGrade4Question } from './grade4Gen.js';
 import { generateGrade5Question } from './grade5Gen.js';
 import { generateGrade6Question } from './grade6Gen.js';
+import {
+  parseWeakTableString,
+  normalizeStudentSections,
+  getHeatmapRange,
+  formatCsvCell,
+  renderHeatmapData,
+  buildRosterSummary,
+} from './dashboardHelpers.js';
 
 const TIME_LIMITS = { 4: 60, 5: 45, 6: 30 };
 const QUESTION_COUNT = 10;
 
 const elements = {
   profileSection: document.getElementById('profileSection'),
+  teacherLoginSection: document.getElementById('teacherLoginSection'),
+  dashboardSection: document.getElementById('dashboardSection'),
   testSection: document.getElementById('testSection'),
   resultSection: document.getElementById('resultSection'),
-  teacherSection: document.getElementById('teacherSection'),
   profileForm: document.getElementById('profileForm'),
   studentName: document.getElementById('studentName'),
   studentGrade: document.getElementById('studentGrade'),
   studentSection: document.getElementById('studentSection'),
+  studentRollNumber: document.getElementById('studentRollNumber'),
+  teacherLoginForm: document.getElementById('teacherLoginForm'),
+  teacherName: document.getElementById('teacherName'),
+  teacherRole: document.getElementById('teacherRole'),
+  teacherAssignedGrade: document.getElementById('teacherAssignedGrade'),
+  teacherAssignedSections: document.getElementById('teacherAssignedSections'),
+  dashboardGradeFilter: document.getElementById('dashboardGradeFilter'),
+  dashboardSectionFilter: document.getElementById('dashboardSectionFilter'),
+  dashboardLoadBtn: document.getElementById('dashboardLoadBtn'),
+  metricTotalDrills: document.getElementById('metricTotalDrills'),
+  metricAvgAccuracy: document.getElementById('metricAvgAccuracy'),
+  metricAvgSpeed: document.getElementById('metricAvgSpeed'),
+  metricWeakTables: document.getElementById('metricWeakTables'),
+  heatmapGrid: document.getElementById('heatmapGrid'),
+  heatmapDescription: document.getElementById('heatmapDescription'),
+  heatmapDetail: document.getElementById('heatmapDetail'),
+  scoreDistribution: document.getElementById('scoreDistribution'),
+  exportCsvBtn: document.getElementById('exportCsvBtn'),
+  rosterDateStart: document.getElementById('rosterDateStart'),
+  rosterDateEnd: document.getElementById('rosterDateEnd'),
+  rosterSearch: document.getElementById('rosterSearch'),
+  rosterTableContainer: document.getElementById('rosterTableContainer'),
   questionProgress: document.getElementById('questionProgress'),
   timerBadge: document.getElementById('timerBadge'),
   timerBar: document.getElementById('timerBar'),
@@ -29,16 +60,16 @@ const elements = {
   retryTestBtn: document.getElementById('retryTestBtn'),
   newProfileBtn: document.getElementById('newProfileBtn'),
   saveStatus: document.getElementById('saveStatus'),
-  reportGradeFilter: document.getElementById('reportGradeFilter'),
-  reportSectionFilter: document.getElementById('reportSectionFilter'),
-  loadReportsBtn: document.getElementById('loadReportsBtn'),
-  reportsContainer: document.getElementById('reportsContainer'),
 };
 
 const state = {
   student: null,
   grade: null,
   section: null,
+  rollNumber: null,
+  teacher: null,
+  dashboardRecords: [],
+  rosterSummary: [],
   questions: [],
   currentIndex: 0,
   correctCount: 0,
@@ -53,7 +84,7 @@ const state = {
 };
 
 function showSection(sectionId) {
-  ['profileSection', 'testSection', 'resultSection', 'teacherSection'].forEach((id) => {
+  ['profileSection', 'teacherLoginSection', 'dashboardSection', 'testSection', 'resultSection'].forEach((id) => {
     const section = document.getElementById(id);
     if (!section) return;
     section.classList.toggle('hidden', id !== sectionId);
@@ -309,15 +340,45 @@ elements.newProfileBtn.addEventListener('click', () => {
   showSection('profileSection');
 });
 
-elements.loadReportsBtn.addEventListener('click', async () => {
-  try {
-    const reports = await loadTeacherReports();
-    renderReportTable(reports);
-  } catch (err) {
-    elements.reportsContainer.innerHTML = '<p class="note">Unable to load reports. Catalyst SDK may be unavailable.</p>';
+elements.teacherLoginForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const name = elements.teacherName.value.trim();
+  const role = elements.teacherRole.value;
+  const grade = elements.teacherAssignedGrade.value ? Number(elements.teacherAssignedGrade.value) : null;
+  const sections = normalizeStudentSections(elements.teacherAssignedSections.value);
+
+  if (!name || !role) {
+    return;
   }
-  showSection('teacherSection');
+
+  state.teacher = {
+    name,
+    role,
+    grade,
+    sections,
+  };
+
+  try {
+    await refreshDashboard();
+    showSection('dashboardSection');
+  } catch (err) {
+    elements.heatmapDetail.innerHTML = '<p class="note">Unable to load dashboard data. Catalyst SDK may be unavailable.</p>';
+    showSection('dashboardSection');
+  }
 });
+
+elements.dashboardLoadBtn.addEventListener('click', async () => {
+  await refreshDashboard();
+});
+
+elements.rosterSearch.addEventListener('input', renderRosterTable);
+
+elements.rosterDateStart.addEventListener('change', renderRosterTable);
+
+elements.rosterDateEnd.addEventListener('change', renderRosterTable);
+
+elements.exportCsvBtn.addEventListener('click', exportRosterCsv);
 
 async function saveResult(report) {
   if (!window.catalyst || !catalyst.datastore) {
@@ -367,61 +428,359 @@ function saveReportLocally(report) {
   localStorage.setItem(key, JSON.stringify(report));
 }
 
-async function loadTeacherReports() {
+function buildTeacherFilters() {
+  if (!state.teacher) return {};
+
+  const gradeFilter = Number(elements.dashboardGradeFilter.value) || null;
+  const sectionFilter = elements.dashboardSectionFilter.value.trim() || null;
+  let assignedGrade = null;
+  let assignedSections = null;
+
+  if (state.teacher.role === 'Teacher') {
+    if (state.teacher.grade) assignedGrade = state.teacher.grade;
+    assignedSections = state.teacher.sections;
+  }
+
+  return {
+    grade: gradeFilter || assignedGrade,
+    section: sectionFilter || (assignedSections && assignedSections.length === 1 ? assignedSections[0] : null),
+    allowedSections: assignedSections,
+  };
+}
+
+async function loadDashboardData() {
+  if (!state.teacher) {
+    throw new Error('Teacher login required');
+  }
   if (!window.catalyst || !catalyst.datastore) {
     throw new Error('Catalyst SDK unavailable');
   }
 
   const datastore = catalyst.datastore();
   const testResultsTable = datastore.table('TestResults');
+  const filters = buildTeacherFilters();
 
-  const filterGrade = elements.reportGradeFilter.value;
-  const filterSection = elements.reportSectionFilter.value.trim();
   let query = testResultsTable.query();
-  if (filterGrade) {
-    query = query.where('Grade', '==', Number(filterGrade));
+  if (filters.grade) {
+    query = query.where('Grade', '==', Number(filters.grade));
   }
-  if (filterSection) {
-    query = query.where('Section', '==', filterSection);
+  if (filters.section) {
+    query = query.where('Section', '==', filters.section);
+  }
+  if (filters.allowedSections && filters.allowedSections.length > 0 && !filters.section) {
+    const sectionsQuery = filters.allowedSections.reduce((q, sectionValue) => {
+      return q.where('Section', '==', sectionValue);
+    }, query);
+    query = sectionsQuery;
   }
 
-  return await query.find();
+  const records = await query.find();
+  state.dashboardRecords = records;
+  state.rosterSummary = buildRosterSummary(records);
+  return records;
 }
 
-function renderReportTable(records) {
+async function refreshDashboard() {
+  const grade = state.teacher?.grade || Number(elements.dashboardGradeFilter.value) || 4;
+  const records = await loadDashboardData();
+  renderDashboardMetrics(records, grade);
+  renderHeatmap(records, grade);
+  renderScoreDistribution(records);
+  renderRosterTable();
+  elements.heatmapDetail.innerHTML = '<p class="note">Select a table cell or student row for deep review details.</p>';
+}
+
+function filterRosterSummary() {
+  const nameRollSearch = elements.rosterSearch.value.trim().toLowerCase();
+  const startDate = elements.rosterDateStart.value ? new Date(elements.rosterDateStart.value) : null;
+  const endDate = elements.rosterDateEnd.value ? new Date(elements.rosterDateEnd.value) : null;
+
+  return state.rosterSummary.filter((row) => {
+    const searchMatches = nameRollSearch
+      ? `${row.studentName} ${row.rollNumber}`.toLowerCase().includes(nameRollSearch)
+      : true;
+
+    const dateMatches = (!startDate && !endDate) || (row.lastTestDate && (() => {
+      const date = new Date(row.lastTestDate);
+      if (startDate && date < startDate) return false;
+      if (endDate && date > new Date(endDate.getTime() + 24 * 60 * 60 * 1000 - 1)) return false;
+      return true;
+    })());
+
+    return searchMatches && dateMatches;
+  });
+}
+
+function renderHeatmap(records, grade) {
+  const range = getHeatmapRange(grade);
+  const heatmapData = renderHeatmapData(records, range);
+
+  elements.heatmapGrid.innerHTML = heatmapData
+    .map((cell) => {
+      const stateClass = cell.errorRate > 25 ? 'heatmap-needs' : cell.errorRate >= 10 ? 'heatmap-moderate' : 'heatmap-mastered';
+      return `
+        <button class="heatmap-cell ${stateClass}" data-table="${cell.tableNum}" type="button">
+          ${cell.tableNum}\n${cell.errorRate}%
+        </button>`;
+    })
+    .join('');
+
+  elements.heatmapGrid.querySelectorAll('.heatmap-cell').forEach((button) => {
+    button.addEventListener('click', () => {
+      const tableNum = Number(button.dataset.table);
+      renderHeatmapDetail(tableNum, records);
+    });
+  });
+}
+
+function renderHeatmapDetail(tableNum, records) {
+  const matchingStudents = records
+    .filter((record) => parseWeakTableString(record.Weak_Tables || record.weakTables || '').includes(String(tableNum)))
+    .map((record) => ({
+      studentName: record.Student_Name || 'Unknown',
+      rollNumber: record.Roll_Number || '—',
+      score: record.Score || 0,
+      timeTaken: record.Time_Taken_Sec || 0,
+      date: record.Created_Time ? new Date(record.Created_Time).toLocaleString() : 'Unknown',
+    }));
+
+  if (matchingStudents.length === 0) {
+    elements.heatmapDetail.innerHTML = `<p class="note">No students have this table flagged for review yet.</p>`;
+    return;
+  }
+
+  elements.heatmapDetail.innerHTML = `
+    <div class="panel-header">
+      <h4>Table of ${tableNum} — Students needing review</h4>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Student</th>
+          <th>Roll</th>
+          <th>Score</th>
+          <th>Time</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${matchingStudents
+          .map(
+            (row) => `
+            <tr>
+              <td>${row.studentName}</td>
+              <td>${row.rollNumber}</td>
+              <td>${row.score}%</td>
+              <td>${row.timeTaken}s</td>
+              <td>${row.date}</td>
+            </tr>`
+          )
+          .join('')}
+      </tbody>
+    </table>`;
+}
+
+function renderScoreDistribution(records) {
   if (!records || records.length === 0) {
-    elements.reportsContainer.innerHTML = '<p class="note">No saved reports found for the selected filters.</p>';
+    elements.scoreDistribution.innerHTML = '<p class="note">No score data available to render distribution.</p>';
+    return;
+  }
+
+  const buckets = {
+    '<50%': 0,
+    '50-75%': 0,
+    '75-90%': 0,
+    '90-100%': 0,
+  };
+
+  records.forEach((record) => {
+    const score = Number(record.Score || 0);
+    if (score < 50) buckets['<50%'] += 1;
+    else if (score < 75) buckets['50-75%'] += 1;
+    else if (score < 90) buckets['75-90%'] += 1;
+    else buckets['90-100%'] += 1;
+  });
+
+  const rows = Object.entries(buckets)
+    .map(([label, count]) => {
+      return `
+      <div class="distribution-row">
+        <span>${label}</span>
+        <strong>${count}</strong>
+      </div>`;
+    })
+    .join('');
+
+  elements.scoreDistribution.innerHTML = `<div class="distribution-list">${rows}</div>`;
+}
+
+function renderDashboardMetrics(records, grade) {
+  const totalDrills = records.length;
+  const avgScore = records.length
+    ? Math.round(records.reduce((sum, record) => sum + Number(record.Score || 0), 0) / records.length)
+    : 0;
+  const avgSpeed = records.length
+    ? Math.round(records.reduce((sum, record) => sum + Number(record.Time_Taken_Sec || 0), 0) / records.length)
+    : 0;
+
+  const weakTableCounts = {};
+  records.forEach((record) => {
+    parseWeakTableString(record.Weak_Tables || record.weakTables || '').forEach((table) => {
+      weakTableCounts[table] = (weakTableCounts[table] || 0) + 1;
+    });
+  });
+
+  const topWeakTables = Object.entries(weakTableCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([table]) => `${table}s`)
+    .join(', ') || 'None';
+
+  elements.metricTotalDrills.textContent = totalDrills;
+  elements.metricAvgAccuracy.textContent = `${avgScore}%`;
+  elements.metricAvgSpeed.textContent = `${avgSpeed}s`;
+  elements.metricWeakTables.textContent = topWeakTables;
+  elements.heatmapDescription.textContent = `Grade ${grade || 4} tables 1–${getHeatmapRange(grade || 4)}`;
+}
+
+function renderRosterTable() {
+  const records = filterRosterSummary();
+  if (!records || records.length === 0) {
+    elements.rosterTableContainer.innerHTML = '<p class="note">No matching student records found.</p>';
     return;
   }
 
   const rows = records
-    .map((report) => {
+    .map((row) => {
       return `
-      <tr>
-        <td>${report.Student_ID || '—'}</td>
-        <td>${report.Score}</td>
-        <td>${report.Total_Questions}</td>
-        <td>${report.Time_Taken_Sec}s</td>
-        <td>${report.Weak_Tables || 'None'}</td>
-        <td>${new Date(report.Created_Time || report.createdTime).toLocaleString()}</td>
+      <tr data-roll="${row.rollNumber}" data-name="${row.studentName}">
+        <td>${row.studentName}</td>
+        <td>${row.rollNumber}</td>
+        <td>${row.totalAttempts}</td>
+        <td>${row.latestScore}%</td>
+        <td>${row.identifiedWeakTables}</td>
+        <td>${new Date(row.lastTestDate).toLocaleDateString()}</td>
       </tr>`;
     })
     .join('');
 
-  elements.reportsContainer.innerHTML = `
+  elements.rosterTableContainer.innerHTML = `
     <table>
       <thead>
         <tr>
-          <th>Student ID</th>
-          <th>Score</th>
-          <th>Questions</th>
-          <th>Time</th>
+          <th>Student Name</th>
+          <th>Roll No</th>
+          <th>Tests Attempted</th>
+          <th>Latest Score</th>
           <th>Weak Tables</th>
-          <th>Saved At</th>
+          <th>Last Test Date</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>`;
+
+  elements.rosterTableContainer.querySelectorAll('tbody tr').forEach((row) => {
+    row.addEventListener('click', () => {
+      const studentName = row.dataset.name;
+      const rollNumber = row.dataset.roll;
+      renderStudentDetail(studentName, rollNumber);
+    });
+  });
+}
+
+function renderStudentDetail(studentName, rollNumber) {
+  const matchingRecords = state.dashboardRecords.filter(
+    (record) => record.Student_Name === studentName && String(record.Roll_Number) === String(rollNumber)
+  );
+
+  if (!matchingRecords.length) {
+    elements.heatmapDetail.innerHTML = '<p class="note">No detail records available for that student.</p>';
+    return;
+  }
+
+  const rows = matchingRecords
+    .sort((a, b) => new Date(b.Created_Time || b.createdTime) - new Date(a.Created_Time || a.createdTime))
+    .map((record) => {
+      const history = record.Answer_History ? JSON.parse(record.Answer_History) : [];
+      const answers = history
+        .map((entry) => `${entry.question.text} — ${entry.isCorrect ? '✔️' : '✖️'}`)
+        .slice(0, 3)
+        .join('<br>');
+
+      return `
+        <tr>
+          <td>${record.Score || 0}%</td>
+          <td>${record.Time_Taken_Sec || 0}s</td>
+          <td>${parseWeakTableString(record.Weak_Tables || record.weakTables || '').join(', ') || 'None'}</td>
+          <td>${new Date(record.Created_Time || record.createdTime).toLocaleString()}</td>
+          <td>${answers || 'No answer detail'}</td>
+        </tr>`;
+    })
+    .join('');
+
+  elements.heatmapDetail.innerHTML = `
+    <div class="panel-header">
+      <h4>${studentName} — Roll ${rollNumber}</h4>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Score</th>
+          <th>Time</th>
+          <th>Weak Tables</th>
+          <th>Date</th>
+          <th>Sample Answers</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function downloadCsv(data, filename) {
+  const csvContent = data.map((row) => row.map(formatCsvCell).join(',')).join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function exportRosterCsv() {
+  const records = filterRosterSummary();
+  if (!records.length) {
+    alert('No roster data available for export.');
+    return;
+  }
+
+  const header = [
+    'Student_Name',
+    'Grade',
+    'Section',
+    'Roll_Number',
+    'Total_Attempts',
+    'Average_Score',
+    'Highest_Score',
+    'Flagged_Weak_Tables',
+    'Last_Test_Timestamp',
+  ];
+
+  const rows = records.map((row) => [
+    row.studentName,
+    row.grade,
+    row.section,
+    row.rollNumber,
+    row.totalAttempts,
+    row.latestScore,
+    row.highestScore,
+    row.identifiedWeakTables,
+    row.lastTestDate,
+  ]);
+
+  downloadCsv([header, ...rows], 'teacher_roster_report.csv');
 }
 
 showSection('profileSection');

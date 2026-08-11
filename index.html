@@ -34,12 +34,49 @@
             </select>
           </label>
           <label>
-            Section / Roll Number
+            Section
             <input id="studentSection" name="studentSection" type="text" required autocomplete="off" />
+          </label>
+          <label>
+            Roll Number
+            <input id="studentRollNumber" name="studentRollNumber" type="text" required autocomplete="off" />
           </label>
           <button type="submit" class="button primary">Start Test</button>
         </form>
         <p class="note">Results will be persisted to Zoho Catalyst Data Store when the Catalyst SDK is available.</p>
+      </section>
+
+      <section id="teacherLoginSection" class="card">
+        <h2>Teacher / Admin Login</h2>
+        <form id="teacherLoginForm" class="form-grid">
+          <label>
+            Name
+            <input id="teacherName" name="teacherName" type="text" required autocomplete="name" />
+          </label>
+          <label>
+            Role
+            <select id="teacherRole" name="teacherRole" required>
+              <option value="">Select role</option>
+              <option value="Teacher">Teacher</option>
+              <option value="Admin">Admin</option>
+            </select>
+          </label>
+          <label>
+            Assigned Grade
+            <select id="teacherAssignedGrade" name="teacherAssignedGrade">
+              <option value="">All</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </label>
+          <label>
+            Assigned Sections
+            <input id="teacherAssignedSections" name="teacherAssignedSections" type="text" placeholder="A,B" autocomplete="off" />
+          </label>
+          <button type="submit" class="button primary">Open Dashboard</button>
+        </form>
+        <p class="note">Teacher and admin analytics are secured by role-based access. Deploy with Catalyst Authentication for production.</p>
       </section>
 
       <section id="testSection" class="card hidden">
@@ -95,28 +132,86 @@
         <p id="saveStatus" class="note"></p>
       </section>
 
-      <section id="teacherSection" class="card hidden">
-        <h2>Teacher / Admin Overview</h2>
-        <p>View saved class reports by grade and section when Catalyst is connected.</p>
-        <div class="filter-group">
-          <label>
-            Grade
-            <select id="reportGradeFilter">
-              <option value="">All</option>
-              <option value="4">4</option>
-              <option value="5">5</option>
-              <option value="6">6</option>
-            </select>
-          </label>
-          <label>
-            Section
-            <input id="reportSectionFilter" type="text" placeholder="Section" autocomplete="off" />
-          </label>
+      <section id="dashboardSection" class="card hidden">
+        <header class="dashboard-header">
+          <div>
+            <p class="eyebrow">Teacher / Admin Analytics</p>
+            <h2 id="dashboardTitle">Multiplication Analytics</h2>
+          </div>
+          <div class="dashboard-controls">
+            <label>
+              Grade
+              <select id="dashboardGradeFilter">
+                <option value="">All</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+              </select>
+            </label>
+            <label>
+              Section
+              <input id="dashboardSectionFilter" type="text" placeholder="Section" autocomplete="off" />
+            </label>
+            <button id="dashboardLoadBtn" class="button primary">Refresh</button>
+          </div>
+        </header>
+
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <span>Total Drills</span>
+            <strong id="metricTotalDrills">0</strong>
+          </div>
+          <div class="metric-card">
+            <span>Avg Accuracy</span>
+            <strong id="metricAvgAccuracy">0%</strong>
+          </div>
+          <div class="metric-card">
+            <span>Avg Speed</span>
+            <strong id="metricAvgSpeed">0s</strong>
+          </div>
+          <div class="metric-card">
+            <span>Top Weak Tables</span>
+            <strong id="metricWeakTables">None</strong>
+          </div>
         </div>
-        <div class="button-row">
-          <button id="loadReportsBtn" class="button primary">Load Reports</button>
+
+        <div class="dashboard-panels">
+          <div class="panel heatmap-panel">
+            <div class="panel-header">
+              <h3>Class Table Mastery Heatmap</h3>
+              <p id="heatmapDescription">Grade 4 tables 1–12</p>
+            </div>
+            <div id="heatmapGrid" class="heatmap-grid"></div>
+          </div>
+          <div class="panel chart-panel">
+            <div class="panel-header">
+              <h3>Score Distribution</h3>
+            </div>
+            <div id="scoreDistribution" class="chart-placeholder">Bar chart view</div>
+          </div>
         </div>
-        <div id="reportsContainer" class="report-table"></div>
+
+        <div class="roster-panel">
+          <div class="roster-header">
+            <h3>Student Roster & Performance History</h3>
+            <button id="exportCsvBtn" class="button secondary">Export CSV Report</button>
+          </div>
+          <div class="filter-group roster-filters">
+            <label>
+              Date Range
+              <input id="rosterDateStart" type="date" />
+            </label>
+            <label>
+              to
+              <input id="rosterDateEnd" type="date" />
+            </label>
+            <label>
+              Search
+              <input id="rosterSearch" type="search" placeholder="Name or Roll" autocomplete="off" />
+            </label>
+          </div>
+          <div id="rosterTableContainer" class="report-table"></div>
+        </div>
       </section>
     </main>
 
