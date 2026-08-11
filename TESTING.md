@@ -1,42 +1,51 @@
-Local Testing Guide
-This file explains how to test the app locally before committing and pushing changes.
+# Testing Guide
 
-Why test locally
-Confirm the site works before auto-deploy picks it up.
-Verify the app loads the data file and the UI behaves correctly.
-Catch errors in index.html, JSON data, or paths before deployment.
-How to test locally
-Option 1: Use the helper script
-Open a terminal in the project folder.
-Run:
-bash start_local.sh
-Open http://localhost:8000 in a browser if it does not open automatically.
-Use the app and verify:
-the page loads without JavaScript errors
-the dataset loads successfully
-the progress updates while answering questions
-custom or preset data file selections work if you change them
-Option 2: Use a simple Python server
-Open a terminal in the project folder.
-Run:
-python3 -m http.server 8000
-Open http://localhost:8000 in a browser.
-What to verify
-The app loads at http://localhost:8000
-The default data file loads and the quiz starts
-If you select a different dataset file, it loads correctly
-No 404 errors for the app assets and data file
-No JavaScript console errors
-Example dataset files
-words.json (default)
-animals.json (example alternate dataset)
-data.json or any other JSON file with the correct shape
-Data file format
-Your data file should be a JSON array of objects like this:
+## Local Verification
 
-[
-  { "word": "example", "sentence": "This is an example sentence." }
-]
-After testing
-If everything works, commit and push your changes.
-If the app fails locally, fix the issue before committing.
+1. Open the repository folder in GitHub Codespaces or a local terminal.
+2. Install the dependencies:
+
+   ```bash
+   npm install
+   ```
+
+3. Start the local server:
+
+   ```bash
+   bash start_local.sh
+   ```
+
+4. Open `http://localhost:8000/`.
+5. Verify the app:
+   - Loads without JavaScript or module errors
+   - Accepts student name, grade, and section
+   - Starts the timed drill and updates questions quickly
+   - Shows a summary after 10 questions or when time expires
+   - Displays weak table analytics
+
+## Unit Test Verification
+
+Run the generator tests and coverage:
+
+```bash
+npm test
+```
+
+Expected results:
+- All tests should pass
+- Coverage should include `grade4Gen.js`, `grade5Gen.js`, and `grade6Gen.js`
+- The grade-specific generation utilities should return valid `text`, `answer`, and `table` fields
+
+## Catalyst Hosting Checks
+
+- Confirm `index.html` contains the Catalyst SDK tags:
+  - `<script src="https://static.zohocdn.com/catalyst/sdk/js/4.6.2/catalystWebSDK.js"></script>`
+  - `<script src="/__catalyst/sdk/init.js"></script>`
+- Confirm `catalyst.json` is configured with:
+  - `client.source: '.'`
+  - `client.index: 'index.html'`
+- Deploy to Zoho Catalyst static hosting and verify the root URL returns HTTP 200.
+
+## Notes
+
+This app is static-first and does not require a backend server in Codespaces. All persistence is designed to use the Catalyst Data Store from the browser.

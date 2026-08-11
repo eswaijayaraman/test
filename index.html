@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multiplication Tables Test</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Math Fluency | Grades 4–6</p>
+        <h1>Multiplication Tables Test</h1>
+        <p class="subtitle">Adaptive timed drills designed to identify weak table families and store progress securely with Zoho Catalyst.</p>
+      </div>
+    </header>
+
+    <main>
+      <section id="profileSection" class="card">
+        <h2>Student Profile</h2>
+        <form id="profileForm" class="form-grid">
+          <label>
+            Student Name
+            <input id="studentName" name="studentName" type="text" required autocomplete="name" />
+          </label>
+          <label>
+            Grade
+            <select id="studentGrade" name="studentGrade" required>
+              <option value="">Select grade</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </label>
+          <label>
+            Section / Roll Number
+            <input id="studentSection" name="studentSection" type="text" required autocomplete="off" />
+          </label>
+          <button type="submit" class="button primary">Start Test</button>
+        </form>
+        <p class="note">Results will be persisted to Zoho Catalyst Data Store when the Catalyst SDK is available.</p>
+      </section>
+
+      <section id="testSection" class="card hidden">
+        <div class="section-header">
+          <div>
+            <h2>Test Drill</h2>
+            <p id="questionProgress" class="small-text"></p>
+          </div>
+          <div id="timerBadge" class="timer-badge">00:00</div>
+        </div>
+        <div class="meter">
+          <div id="timerBar" class="meter-fill"></div>
+        </div>
+
+        <div class="question-card">
+          <p id="questionLabel" class="question-label"></p>
+          <label class="answer-label">
+            Your answer
+            <input id="answerInput" type="text" inputmode="decimal" autocomplete="off" />
+          </label>
+          <div class="button-row">
+            <button id="submitAnswerBtn" class="button primary">Submit</button>
+            <button id="skipQuestionBtn" class="button secondary">Skip</button>
+          </div>
+          <p id="feedbackMessage" class="feedback"></p>
+        </div>
+      </section>
+
+      <section id="resultSection" class="card hidden">
+        <h2>Test Summary</h2>
+        <div class="result-grid">
+          <div class="result-card">
+            <span>Score</span>
+            <strong id="scoreValue">0</strong>
+          </div>
+          <div class="result-card">
+            <span>Accuracy</span>
+            <strong id="accuracyValue">0%</strong>
+          </div>
+          <div class="result-card">
+            <span>Time Taken</span>
+            <strong id="timeValue">0s</strong>
+          </div>
+          <div class="result-card">
+            <span>Weak Tables</span>
+            <strong id="weakTablesValue">None</strong>
+          </div>
+        </div>
+        <div class="results-actions">
+          <button id="retryTestBtn" class="button secondary">Retry</button>
+          <button id="newProfileBtn" class="button secondary">New Student</button>
+        </div>
+        <p id="saveStatus" class="note"></p>
+      </section>
+
+      <section id="teacherSection" class="card hidden">
+        <h2>Teacher / Admin Overview</h2>
+        <p>View saved class reports by grade and section when Catalyst is connected.</p>
+        <div class="filter-group">
+          <label>
+            Grade
+            <select id="reportGradeFilter">
+              <option value="">All</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </label>
+          <label>
+            Section
+            <input id="reportSectionFilter" type="text" placeholder="Section" autocomplete="off" />
+          </label>
+        </div>
+        <div class="button-row">
+          <button id="loadReportsBtn" class="button primary">Load Reports</button>
+        </div>
+        <div id="reportsContainer" class="report-table"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Built for Zoho Catalyst static hosting with client-side adaptive generation and Catalyst Data Store persistence.</p>
+    </footer>
+  </div>
+
+  <script src="https://static.zohocdn.com/catalyst/sdk/js/4.6.2/catalystWebSDK.js"></script>
+  <script src="/__catalyst/sdk/init.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

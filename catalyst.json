@@ -1,0 +1,6 @@
+{
+  "client": {
+    "source": ".",
+    "index": "index.html"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "multiplication-tables-test",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --coverage",
+    "lint": "echo 'No lint configured yet.'",
+    "start": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "@vitest/coverage-istanbul": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.10",
+    "vitest": "^4.1.10"
+  }
+}
